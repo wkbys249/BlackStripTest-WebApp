@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SSE黒帯テスト用</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #1a1a1a;
+            touch-action: none;
+        }
+
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #canvas-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #000000;
+        }
+
+        #canvas {
+            height: 100%;
+            object-fit: contain;
+        }
+
+        #controls {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 240px;
+            padding: 20px;
+            background-color: rgba(32, 32, 32, 0.8);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            align-items: center;
+            z-index: 10;
+            backdrop-filter: blur(5px);
+        }
+
+        #fullscreenBtn {
+            width: 200px;
+            padding: 10px 0;
+            font-size: 16px;
+            background-color: #404040;
+            color: #e0e0e0;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            touch-action: manipulation;
+            transition: background-color 0.2s;
+        }
+
+        #fullscreenBtn:active {
+            background-color: #505050;
+        }
+
+        #slider {
+            width: 240px;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 20px;
+            background: #404040;
+            border-radius: 6px;
+            outline: none;
+        }
+
+        #slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 32px;
+            height: 32px;
+            margin-top: 4px;
+            background: #808080;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid #a0a0a0;
+        }
+
+        #slider::-moz-range-thumb {
+            width: 32px;
+            height: 32px;
+            background: #808080;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid #a0a0a0;
+        }
+
+        @media (max-width: 320px) {
+            #controls {
+                width: 90%;
+                padding: 15px;
+            }
+
+            #slider,
+            #fullscreenBtn {
+                width: 90%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="container">
+        <div id="canvas-container">
+            <canvas id="canvas"></canvas>
+        </div>
+        <div id="controls">
+            <input type="range" id="slider" min="0" max="100" value="0">
+            <button id="fullscreenBtn">全画面表示</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        const slider = document.getElementById('slider');
+        const controls = document.getElementById('controls');
+
+        // キャンバスのサイズを設定
+        canvas.width = 1920;
+        canvas.height = 1080;
+
+        // グリッドのパラメータ
+        const gridSize = 40;
+        const cells = [];
+
+        // セルの初期化
+        for (let y = 0; y < canvas.height / gridSize; y++) {
+            cells[y] = [];
+            for (let x = 0; x < canvas.width / gridSize; x++) {
+                cells[y][x] = {
+                    value: Math.random(),
+                    targetValue: Math.random()
+                };
+            }
+        }
+
+        // スライダー値の更新関数
+        function updateSliderValue(delta) {
+            const currentValue = parseInt(slider.value);
+            const newValue = Math.max(0, Math.min(100, currentValue + delta));
+            if (currentValue !== newValue) {
+                slider.value = newValue;
+                // Input eventを発火させてスライダーの値が変更されたことを通知
+                slider.dispatchEvent(new Event('input'));
+            }
+        }
+
+        // キーボードイベントの処理
+        let keyInterval = null;
+        const keySpeed = 2; // キーを押している間の変化量
+
+        document.addEventListener('keydown', (e) => {
+            if (keyInterval) return; // すでにインターバルが設定されている場合は何もしない
+
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                const delta = e.key === 'ArrowLeft' ? -keySpeed : keySpeed;
+                updateSliderValue(delta);
+
+                // キーを押し続けた場合の処理
+                keyInterval = setInterval(() => {
+                    updateSliderValue(delta);
+                }, 50); // 50ミリ秒ごとに更新
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                if (keyInterval) {
+                    clearInterval(keyInterval);
+                    keyInterval = null;
+                }
+            }
+        });
+
+        // 黒帯の幅を計算する関数
+        function calculateBlackBars(sliderValue) {
+            const ratio = sliderValue / 100;
+            // UIの幅を考慮して最大の黒帯幅を計算
+            const maxBlackBarRatio = 1 - ((controls.offsetWidth + 50) / canvas.width);
+            const targetWidth = canvas.width * (1 - ratio * maxBlackBarRatio);
+            const blackBarWidth = (canvas.width - targetWidth) / 2;
+            return blackBarWidth;
+        }
+
+        // アニメーション関数
+        function animate() {
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const blackBarWidth = calculateBlackBars(slider.value);
+            const speed = 0.05;
+
+            // 有効な描画領域
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(blackBarWidth, 0, canvas.width - blackBarWidth * 2, canvas.height);
+            ctx.clip();
+
+            // 背景色で塗りつぶし
+            ctx.fillStyle = '#2a2a2a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // セルのアニメーション
+            for (let y = 0; y < cells.length; y++) {
+                for (let x = 0; x < cells[y].length; x++) {
+                    const cell = cells[y][x];
+
+                    if (Math.abs(cell.value - cell.targetValue) < 0.01) {
+                        cell.targetValue = Math.random();
+                    }
+                    cell.value += (cell.targetValue - cell.value) * speed;
+
+                    const grayValue = Math.floor((cell.value * 0.5 + 0.25) * 255);
+                    ctx.fillStyle = `rgb(${grayValue}, ${grayValue}, ${grayValue})`;
+                    ctx.fillRect(x * gridSize, y * gridSize, gridSize - 1, gridSize - 1);
+                }
+            }
+
+            ctx.restore();
+
+            requestAnimationFrame(animate);
+        }
+
+        // 全画面表示の切り替え
+        fullscreenBtn.addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+                screen.orientation.lock('landscape').catch(() => { });
+                fullscreenBtn.textContent = '全画面解除';
+            } else {
+                document.exitFullscreen();
+                fullscreenBtn.textContent = '全画面表示';
+            }
+        });
+
+        // フルスクリーン状態の変更を監視
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement) {
+                fullscreenBtn.textContent = '全画面表示';
+            }
+        });
+
+        // ウィンドウがフォーカスを失ったときにキーイベントをクリア
+        window.addEventListener('blur', () => {
+            if (keyInterval) {
+                clearInterval(keyInterval);
+                keyInterval = null;
+            }
+        });
+
+        // アニメーションの開始
+        animate();
+    </script>
+</body>
+
+</html>
